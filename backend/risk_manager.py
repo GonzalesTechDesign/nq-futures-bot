@@ -5,7 +5,7 @@ from pathlib import Path
 logger = logging.getLogger("RiskManager")
 
 class RiskManager:
-    def __init__(self, config_path: str = "/home/miggs101/config/risk_config.yaml"):
+    def __init__(self, config_path: str = "/home/miggs101/Development/nq-futures-bot/config/risk_config.yaml"):
         self.config = self._load_config(config_path)
         self.daily_pnl = 0.0
         self.peak_equity = 100000.0
@@ -59,6 +59,18 @@ class RiskManager:
         if drawdown_pct >= self.config["max_drawdown_pct"] or self.daily_pnl <= -self.config["max_daily_loss_usd"]:
             logger.error(f"KILL-SWITCH TRIGGERED: Drawdown {drawdown_pct:.2f}% or Daily PnL {self.daily_pnl}")
             self.killed = True
+
+    def calculate_protective_stops(self, entry_price: float, side: str, atr: float = 25.0) -> tuple[float, float]:
+        """
+        Calculates Stop-Loss and Take-Profit prices for bracket orders based on volatility (ATR).
+        """
+        if side.upper() == "BUY":
+            stop_loss = entry_price - (2.0 * atr)
+            take_profit = entry_price + (3.0 * atr)
+        else:
+            stop_loss = entry_price + (2.0 * atr)
+            take_profit = entry_price - (3.0 * atr)
+        return round(stop_loss, 2), round(take_profit, 2)
 
     def is_killed(self) -> bool:
         return self.killed
