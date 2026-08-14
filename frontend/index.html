@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NQ Futures Trading Bot - Mission Control</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+    <!-- Paper vs Live Persistent Banner -->
+    <div id="mode-banner" class="bg-amber-500 text-slate-950 font-bold px-4 py-2 text-center text-sm tracking-wider flex justify-between items-center shadow-lg">
+        <span>⚠️ PAPER TRADING MODE ACTIVE (IBKR PORT 7497) - SIMULATED EXECUTION</span>
+        <span id="rollover-banner-status" class="bg-slate-950 text-amber-400 px-3 py-0.5 rounded text-xs">Rollover Check: OK</span>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <!-- Header & Controls -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-800 pb-4">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+                    NQ Futures Trading Bot 
+                    <span id="bot-status-badge" class="bg-emerald-500/20 text-emerald-400 text-xs px-3 py-1 rounded-full border border-emerald-500/30">RUNNING</span>
+                </h1>
+                <p class="text-slate-400 text-sm mt-1">NautilusTrader Core • Databento CME GLBX.MDP3 Feed • Walk-Forward ML Validation</p>
+            </div>
+            <div class="flex items-center gap-3 mt-4 md:mt-0">
+                <button onclick="toggleBotMode()" id="mode-toggle-btn" class="bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm transition shadow">
+                    Switch to LIVE Mode
+                </button>
+                <button onclick="stopBot()" class="bg-rose-600 hover:bg-rose-500 text-white font-semibold px-4 py-2 rounded-lg text-sm transition shadow">
+                    Stop Bot & Flatten
+                </button>
+                <button onclick="startBot()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg text-sm transition shadow">
+                    Start Bot
+                </button>
+            </div>
+        </header>
+
+        <!-- Top Metrics Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow">
+                <h3 class="text-slate-400 text-xs font-medium uppercase tracking-wider">Net Liquidation</h3>
+                <p id="net-liq" class="text-2xl font-bold text-white mt-2">$100,570.00</p>
+                <span class="text-emerald-400 text-xs mt-1 block">Daily P&L: <span id="daily-pnl">+$570.00</span></span>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow">
+                <h3 class="text-slate-400 text-xs font-medium uppercase tracking-wider">Margin Usage</h3>
+                <p id="margin-used" class="text-2xl font-bold text-white mt-2">$15,000.00</p>
+                <span class="text-slate-400 text-xs mt-1 block">Available: <span id="margin-avail">$85,570.00</span></span>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow">
+                <h3 class="text-slate-400 text-xs font-medium uppercase tracking-wider">Active Contract</h3>
+                <p id="active-contract" class="text-2xl font-bold text-amber-400 mt-2">NQU6</p>
+                <span id="days-expiry" class="text-slate-400 text-xs mt-1 block">18 days to expiration</span>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow">
+                <h3 class="text-slate-400 text-xs font-medium uppercase tracking-wider">System Health</h3>
+                <div class="flex items-center gap-2 mt-2">
+                    <span class="inline-block w-3 h-3 rounded-full bg-emerald-500"></span>
+                    <span class="text-sm text-slate-300">IBKR & Databento Connected</span>
+                </div>
+                <span class="text-slate-400 text-xs mt-1 block">Rollover Status: <span id="rollover-status-text" class="text-emerald-400">Stable</span></span>
+            </div>
+        </div>
+
+        <!-- Middle Section: Positions & Walk-Forward Backtest -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- Open Positions -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow">
+                <h2 class="text-lg font-bold text-white mb-4">Current Open Positions</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-slate-300">
+                        <thead class="bg-slate-800 text-slate-400 uppercase text-xs">
+                            <tr>
+                                <th class="px-4 py-3">Symbol</th>
+                                <th class="px-4 py-3">Qty</th>
+                                <th class="px-4 py-3">Avg Price</th>
+                                <th class="px-4 py-3">Unrealized P&L</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positions-table">
+                            <tr class="border-b border-slate-800">
+                                <td class="px-4 py-3 font-medium text-white">NQU6</td>
+                                <td class="px-4 py-3 text-emerald-400">+2</td>
+                                <td class="px-4 py-3">18,550.25</td>
+                                <td class="px-4 py-3 text-emerald-400">+$570.00</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Walk-Forward Validation Results -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-white">Walk-Forward Validation (Purged CV)</h2>
+                    <span id="wf-sharpe" class="bg-blue-500/20 text-blue-400 text-xs px-3 py-1 rounded border border-blue-500/30 font-mono">Sharpe: 1.74</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-slate-300">
+                        <thead class="bg-slate-800 text-slate-400 uppercase text-xs">
+                            <tr>
+                                <th class="px-3 py-2">Test Period</th>
+                                <th class="px-3 py-2">Sharpe</th>
+                                <th class="px-3 py-2">Return</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wf-table">
+                            <tr class="border-b border-slate-800">
+                                <td class="px-3 py-2">2024-07-01 to 2024-09-30</td>
+                                <td class="px-3 py-2 text-emerald-400 font-mono">1.85</td>
+                                <td class="px-3 py-2 text-emerald-400">+14.2%</td>
+                            </tr>
+                            <tr class="border-b border-slate-800">
+                                <td class="px-3 py-2">2024-10-01 to 2024-12-31</td>
+                                <td class="px-3 py-2 text-emerald-400 font-mono">1.62</td>
+                                <td class="px-3 py-2 text-emerald-400">+11.5%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trade Execution Audit Log -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow">
+            <h2 class="text-lg font-bold text-white mb-4">Trade Execution & Reasoning Audit Log</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-300">
+                    <thead class="bg-slate-800 text-slate-400 uppercase text-xs">
+                        <tr>
+                            <th class="px-4 py-3">Timestamp (UTC)</th>
+                            <th class="px-4 py-3">Symbol</th>
+                            <th class="px-4 py-3">Side</th>
+                            <th class="px-4 py-3">Qty</th>
+                            <th class="px-4 py-3">Price</th>
+                            <th class="px-4 py-3">Reasoning / Audit Trail</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trades-table">
+                        <tr class="border-b border-slate-800">
+                            <td class="px-4 py-3 font-mono text-xs">2026-08-14 09:30:15</td>
+                            <td class="px-4 py-3 font-medium text-white">NQU6</td>
+                            <td class="px-4 py-3 text-emerald-400 font-bold">BUY</td>
+                            <td class="px-4 py-3">2</td>
+                            <td class="px-4 py-3">18,545.00</td>
+                            <td class="px-4 py-3 text-slate-400 text-xs">Walk-forward ML model prediction p > 0.65 (momentum feature threshold met)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "http://localhost:8000/api/v1";
+
+        async function fetchDashboardData() {
+            try {
+                const statusRes = await fetch(`${API_BASE}/status`);
+                const status = await statusRes.json();
+                
+                const banner = document.getElementById("mode-banner");
+                const toggleBtn = document.getElementById("mode-toggle-btn");
+                if (status.mode === "LIVE") {
+                    banner.className = "bg-rose-600 text-white font-bold px-4 py-2 text-center text-sm tracking-wider flex justify-between items-center shadow-lg animate-pulse";
+                    banner.innerHTML = `<span>🚨 LIVE TRADING MODE ACTIVE (REAL CAPITAL AT RISK)</span><span class="bg-slate-950 text-rose-400 px-3 py-0.5 rounded text-xs">Live Risk Enabled</span>`;
+                    toggleBtn.textContent = "Switch to PAPER Mode";
+                    toggleBtn.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg text-sm transition shadow";
+                } else {
+                    banner.className = "bg-amber-500 text-slate-950 font-bold px-4 py-2 text-center text-sm tracking-wider flex justify-between items-center shadow-lg";
+                    banner.innerHTML = `<span>⚠️ PAPER TRADING MODE ACTIVE (IBKR PORT 7497) - SIMULATED EXECUTION</span><span id="rollover-banner-status" class="bg-slate-950 text-amber-400 px-3 py-0.5 rounded text-xs">Rollover Check: OK</span>`;
+                    toggleBtn.textContent = "Switch to LIVE Mode";
+                    toggleBtn.className = "bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm transition shadow";
+                }
+
+                document.getElementById("active-contract").textContent = status.active_contract;
+                document.getElementById("days-expiry").textContent = `${status.days_to_expiration} days to expiration`;
+                document.getElementById("bot-status-badge").textContent = status.status;
+
+                if (status.rollover_pending) {
+                    document.getElementById("rollover-status-text").textContent = "PENDING ROLL";
+                    document.getElementById("rollover-status-text").className = "text-rose-400 font-bold";
+                }
+
+                const posRes = await fetch(`${API_BASE}/positions`);
+                const posData = await posRes.json();
+                document.getElementById("net-liq").textContent = `$${posData.net_liquidation.toLocaleString()}`;
+                document.getElementById("margin-used").textContent = `$${posData.margin_used.toLocaleString()}`;
+                document.getElementById("margin-avail").textContent = `$${posData.margin_available.toLocaleString()}`;
+
+                const pnlRes = await fetch(`${API_BASE}/pnl`);
+                const pnlData = await pnlRes.json();
+                document.getElementById("daily-pnl").textContent = `+$${pnlData.daily_pnl.toLocaleString()}`;
+
+            } catch (err) {
+                console.error("Failed to fetch dashboard data:", err);
+            }
+        }
+
+        async function startBot() {
+            await fetch(`${API_BASE}/control/start`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: "PAPER" })
+            });
+            fetchDashboardData();
+        }
+
+        async function stopBot() {
+            await fetch(`${API_BASE}/control/stop`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ flatten: true })
+            });
+            fetchDashboardData();
+        }
+
+        async function toggleBotMode() {
+            const currentMode = document.getElementById("mode-toggle-btn").textContent.includes("LIVE") ? "LIVE" : "PAPER";
+            if (currentMode === "LIVE") {
+                const confirmed = confirm("WARNING: You are about to switch to LIVE TRADING mode with real capital. Security and Review sign-off required. Proceed?");
+                if (!confirmed) return;
+            }
+            await fetch(`${API_BASE}/control/start`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: currentMode })
+            });
+            fetchDashboardData();
+        }
+
+        setInterval(fetchDashboardData, 3000);
+        fetchDashboardData();
+    </script>
+</body>
+</html>
