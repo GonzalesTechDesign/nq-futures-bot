@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 from typing import List, Dict, Optional
 from ib_insync import IB, Future, MarketOrder, LimitOrder, StopOrder, BracketOrder, Contract
@@ -22,6 +23,18 @@ class IBKRClient:
     def connect(self) -> bool:
         if self.connected:
             return True
+
+        # If we're inside an async event loop (FastAPI), ib_insync will crash.
+        # Skip the connect — the bot runs in paper/simulated mode.
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                logger.info("Inside async event loop — skipping IBKR connect (paper mode)")
+                self.connected = False
+                return False
+        except RuntimeError:
+            pass  # No event loop — safe to try connecting
+
         try:
             self.ib.connect(self.host, self.port, clientId=self.client_id, timeout=3.0)
             self.connected = self.ib.isConnected()
@@ -29,6 +42,14 @@ class IBKRClient:
                 logger.info(f"Connected to IBKR at {self.host}:{self.port} (Client ID: {self.client_id})")
                 self.breaker.record_success()
             return self.connected
+        except RuntimeError as e:
+            if "event loop" in str(e).lower() or "another loop" in str(e).lower():
+                logger.warning(f"IBKR event loop conflict (expected in FastAPI): {e}")
+            else:
+                logger.error(f"Failed to connect to IBKR: {e}")
+            self.breaker.record_failure()
+            self.connected = False
+            return False
         except Exception as e:
             logger.error(f"Failed to connect to IBKR: {e}")
             self.breaker.record_failure()

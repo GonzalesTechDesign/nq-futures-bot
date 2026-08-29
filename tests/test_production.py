@@ -26,7 +26,7 @@ def test_database_persistence():
 
 def test_risk_manager_protective_stops():
     rm = RiskManager()
-    sl, tp = rm.calculate_protective_stops(18500.0, "BUY", atr=25.0)
+    sl, tp = rm.calculate_protective_stops(18500.0, "BUY")
     assert sl < 18500.0
     assert tp > 18500.0
 

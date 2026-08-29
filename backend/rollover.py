@@ -19,7 +19,9 @@ class ContractRolloverManager:
 
     def get_front_contract(self, base_symbol: str = "NQ", current_date: Optional[date] = None) -> tuple[str, int, date]:
         if current_date is None:
-            current_date = datetime.utcnow().date()
+            # Match the module's local day-rollover clock (risk manager uses
+            # datetime.now().date()) rather than a UTC date.
+            current_date = datetime.now().date()
         
         year = current_date.year
         month = current_date.month

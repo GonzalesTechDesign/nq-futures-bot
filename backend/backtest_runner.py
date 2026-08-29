@@ -1,57 +1,56 @@
 import logging
-import numpy as np
+import os
 from typing import Dict, Any
+from backend.backtest_engine import BacktestEngine
 
 logger = logging.getLogger("WalkForwardBacktest")
 
+
 class WalkForwardValidator:
     """
-    Implements Walk-Forward and Purged Cross-Validation for NQ Futures ML strategy.
-    Strictly forbids random splits on time-series data.
+    Walk-Forward validation for NQ Futures strategy under Lucid Trading eval rules.
+
+    Delegates to BacktestEngine which simulates daily trading sessions with
+    proper eval constraints: intraday drawdown, consistency rule, profit target,
+    session windows, and daily loss limits.
     """
-    def __init__(self, data_source: str = "Databento CME GLBX.MDP3"):
-        self.data_source = data_source
+    def __init__(
+        self,
+        n_days: int = 20,
+        n_windows: int = 5,
+        seed: int = None,
+    ):
+        self.n_days = n_days
+        self.n_windows = n_windows
+        self.seed = seed
 
-    def run_walk_forward_validation(self) -> Dict[str, Any]:
-        logger.info(f"Running Walk-Forward Purged CV validation using source: {self.data_source}")
-        
-        # Simulated robust walk-forward windows for NQ momentum model
-        windows = [
-            {
-                "train_start": "2024-01-01",
-                "train_end": "2024-06-30",
-                "test_start": "2024-07-01",
-                "test_end": "2024-09-30",
-                "sharpe": 1.85,
-                "return_pct": 14.2
-            },
-            {
-                "train_start": "2024-04-01",
-                "train_end": "2024-09-30",
-                "test_start": "2024-10-01",
-                "test_end": "2024-12-31",
-                "sharpe": 1.62,
-                "return_pct": 11.5
-            },
-            {
-                "train_start": "2024-07-01",
-                "train_end": "2024-12-31",
-                "test_start": "2025-01-01",
-                "test_end": "2025-03-31",
-                "sharpe": 1.78,
-                "return_pct": 13.1
-            }
-        ]
+    def run_walk_forward_validation(self, seed: int = None) -> Dict[str, Any]:
+        logger.info(
+            f"Running Walk-Forward validation — "
+            f"days={self.n_days}, windows={self.n_windows}"
+        )
 
-        aggregate_sharpe = float(np.mean([w["sharpe"] for w in windows]))
-        aggregate_max_dd = -4.2
+        val_seed = seed if seed is not None else self.seed
+        engine = BacktestEngine(
+            n_days=self.n_days,
+            seed=val_seed,
+        )
+        result = engine.run_walk_forward(n_windows=self.n_windows)
 
-        result = {
-            "strategy_name": "NQ_Momentum_WF_v1",
-            "validation_method": "walk_forward_purged_cv",
-            "windows": windows,
-            "aggregate_sharpe": round(aggregate_sharpe, 2),
-            "aggregate_max_dd": aggregate_max_dd
-        }
-        logger.info(f"Walk-forward validation completed successfully. Aggregate Sharpe: {aggregate_sharpe:.2f}")
+        # Ensure backward-compatible top-level keys the API schema expects
+        result.setdefault("strategy_name", "NQ_Lucid_Eval_v1")
+        result.setdefault("validation_method", "walk_forward")
+
+        logger.info(
+            f"Walk-forward validation complete. "
+            f"Aggregate Sharpe: {result['aggregate_sharpe']}, "
+            f"Pass rate: {result.get('pass_rate', 'N/A')}"
+        )
         return result
+
+    def run_single_backtest(self, seed: int = None) -> Dict[str, Any]:
+        """Run a single eval simulation without walk-forward splits."""
+        logger.info(f"Running single eval backtest — days={self.n_days}")
+        val_seed = seed if seed is not None else self.seed
+        engine = BacktestEngine(n_days=self.n_days, seed=val_seed)
+        return engine.run_single_backtest()

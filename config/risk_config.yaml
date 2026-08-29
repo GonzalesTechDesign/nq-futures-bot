@@ -1,9 +1,40 @@
-# NQ Futures Risk Management Configuration
+# NQ Futures Risk Management Configuration - Lucid Trading 50k Eval
 risk_limits:
-  max_contracts: 3
-  max_daily_loss_usd: 2500.0
-  max_drawdown_pct: 5.0
-  margin_warning_pct: 70.0
-  margin_liquidation_pct: 85.0
-  rollover_days_threshold: 5
+  max_contracts: 4
+  # Eval specific rules
+  profit_target_usd: 3000.0
+  daily_loss_limit_usd: 1200.0 # Pause trading for the day
+  trailing_drawdown_limit_usd: 2000.0 # Hard lock breach
+  
+  # Buffer zones for position scaling
+  buffer_warning_pct: 50.0  # e.g., @ $1000 drawdown used
+  buffer_critical_pct: 75.0 # e.g., @ $1500 drawdown used
+  buffer_danger_pct: 90.0   # e.g., @ $1800 drawdown used
+  
+  # Trade constraints
+  max_trades_per_day: 6
+  max_risk_per_trade_usd: 500.0
+  max_consecutive_losses: 3
+  
   allow_live_trading: false
+  rollover_days_threshold: 5
+
+# Strategy parameters — shared by the LIVE NQMomentumStrategy AND the
+# BacktestEngine (single source of truth). This is the tunable surface the
+# self-improving agent's search will float over. NOTE: changing these requires
+# a server restart to take effect on the live bot (config is read at
+# construction time).
+
+# Strategy parameters — shared by the LIVE NQMomentumStrategy AND the
+# BacktestEngine (single source of truth). This is the tunable surface the
+# self-improving agent's search will float over. NOTE: changing these requires
+# a server restart to take effect on the live bot (config is read at
+# construction time).
+strategy:
+  buy_threshold: 0.6
+  min_holding_bars: 40
+  momentum_period: 7
+  sell_threshold: 0.4
+  sma_fast: 10
+  sma_slow: 30
+  trailing_stop_points: 25.0

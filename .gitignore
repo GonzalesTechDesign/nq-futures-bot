@@ -4,3 +4,13 @@ __pycache__/
 .env
 *.pyc
 .DS_Store
+*.swp
+
+# Local SQLite databases (trade/signal history incl. raw payloads) — never track
+*.db
+
+# Server logs (may contain webhook payloads/token strings)
+*.log
+
+# Cached market data (fetched from upstream, reproducible or rebuilt — never track)
+data/

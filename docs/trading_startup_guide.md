@@ -1,66 +1,65 @@
-# NQ Futures Trading Bot — Paper & Live Trading Startup Guide
+# NQ Futures Trading Bot - Startup Guide
 
-To transition our NQ Futures Trading Bot from simulation/development to **actively trading in paper mode** (and eventually live mode), follow this step-by-step checklist.
+Setup and startup steps for the current FastAPI-based NQ Futures Trading Bot.
 
----
+## 1. Configure Environment
 
-## Step 1: Configure Environment Variables
-1. Copy the secure environment template:
+1. Copy the environment template:
    ```bash
    cd /home/miggs101/Development/nq-futures-bot
    cp config/.env.example .env
    ```
-2. Edit `.env` and insert your actual **Databento API key**:
-   ```env
-   TRADING_MODE=PAPER
-   IBKR_HOST=127.0.0.1
-   IBKR_PORT=7497
-   IBKR_CLIENT_ID=1
-   DATABENTO_API_KEY=db-your-actual-databento-api-key
-   ```
+2. Edit `.env`:
+   - Set `DATABENTO_API_KEY` (optional — the auto-trader uses Yahoo Finance `NQ=F`; Databento is used only for history when a key is present).
+   - Set `ADMIN_API_KEY` and `WEBHOOK_SECRET`, or leave them out and let the app generate random values on first run.
+   - Keep `TRADING_MODE=PAPER` (LIVE is blocked by default).
 
----
+## 2. Database Permission
 
-## Step 2: Start Interactive Brokers TWS or IB Gateway (Paper Trading)
-NautilusTrader communicates locally with Interactive Brokers via the TWS API.
-1. Launch **Interactive Brokers TWS** or **IB Gateway** on your machine.
-2. Log in using your **Paper Trading account** credentials.
-3. Verify TWS API Settings (File → Global Configuration → API → Settings):
-   - **Enable ActiveX and Socket Clients:** Checked ✅
-   - **Socket Port:** `7497` (Paper trading default) ✅
-   - **Bypass Order Messaging for API Orders:** Checked (optional, avoids popups) ✅
-   - **Trusted IPs:** Include `127.0.0.1` ✅
+The app uses SQLite at `nq_bot.db`. The user running the server must be able to write to it. If the file was created under a different user (e.g. root from `sudo`), fix ownership:
 
----
+```bash
+sudo chown $USER:$USER nq_bot.db
+```
 
-## Step 3: Connect NautilusTrader Live/Paper Engine
-To connect NautilusTrader's core execution engine to IBKR and Databento instead of mock feeds, instantiate NautilusTrader's `TradingNode` in `backend/engine.py`:
-- **Data Client:** `DatabentoLiveDataClient` configured with your `DATABENTO_API_KEY` and CME GLBX.MDP3 NQ subscription (`NQU6`).
-- **Execution Client:** `InteractiveBrokersExecutionClient` connected to `127.0.0.1:7497`.
-- **Strategy Deployment:** Register `NQMomentumStrategy` with the NautilusTrader `TradingNode`.
+Without write permission, P&L recording and risk-state persistence degrade.
 
----
+## 3. Start the Server
 
-## Step 4: Run Paper Trading & Verify Execution
-1. Start the API server and dashboard:
-   ```bash
-   cd /home/miggs101/Development/nq-futures-bot
-   PYTHONPATH=. ./venv/bin/uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
-   ```
-2. Open `frontend/index.html` in your browser.
-3. Click **"Start Bot"** on the dashboard. 
-4. Verify on the persistent banner that **PAPER TRADING MODE ACTIVE (IBKR PORT 7497)** is displayed, and check the trade log and IBKR TWS screen to confirm orders are being placed in your paper account.
+```bash
+cd /home/miggs101/Development/nq-futures-bot
+source venv/bin/activate
+python run_server.py          # port 8888 (default), host 0.0.0.0
+```
 
----
+For TradingView webhooks arriving on port 80 (webhook URLs must use port 80 or 443):
 
-## 🚨 Step 5: Transitioning to Live Trading (Restricted)
-Per our non-negotiable safety constraints, **live trading (real capital) cannot be enabled casually**:
-1. **Paper Validation:** The bot must successfully run in paper trading mode through at least one complete NQ quarterly contract rollover and market session without risk breaches.
-2. **Security-Agent Audit:** `@security` must review API endpoints, credential storage, and TWS local bindings.
-3. **Review-Agent Sign-Off:** `@reviewer` must verify backtest/live parity and walk-forward validation.
-4. **Configuration Override:** Once authorized, update `config/risk_config.yaml`:
-   ```yaml
-   risk_limits:
-     allow_live_trading: true
-   ```
-   and switch the environment variable `TRADING_MODE=LIVE` (IBKR port `7496`).
+```bash
+sudo python run_server.py --port 80
+```
+
+Ports below 1024 require root.
+
+## 4. Open the Dashboard
+
+- API docs (Swagger UI): `http://localhost:8888/docs`
+- Dashboard: `http://localhost:8888/` (served from `frontend/`)
+
+The dashboard shows status, positions, P&L, DLL remaining, buffer zone, consistency, Trades Today, profit-target progress, TradingView signals, settings, and live WebSocket updates.
+
+## 5. TradingView Webhook Setup
+
+In TradingView, create an alert whose message is plain text or JSON, and point it at:
+
+```
+http://YOUR_IP:8888/api/v1/webhook/tradingview?token=YOUR_WEBHOOK_SECRET
+```
+
+(or port 80 when run as root). Example payloads:
+
+- Plain text: `BUY NQ 2 @18500`, `SELL MNQ`, `FLATTEN`
+- JSON: `{"action":"BUY","symbol":"NQ","quantity":2,"price":18500,"token":"YOUR_WEBHOOK_SECRET"}`
+
+Notes:
+- TradingView cannot send custom headers, so the shared secret is passed via `?token=` or a `token` body field.
+- The endpoint returns HTTP 200 for accepted signals (executed or risk-rejected); it returns 4xx for invalid/missing auth, oversized, or rate-limited payloads.

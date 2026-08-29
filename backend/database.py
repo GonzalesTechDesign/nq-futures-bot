@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 
@@ -50,6 +50,41 @@ class DBPnLRecord(Base):
     total_pnl = Column(Float, default=0.0)
     net_liquidation = Column(Float, default=100000.0)
     margin_used = Column(Float, default=0.0)
+
+class DBTradingViewSignal(Base):
+    __tablename__ = "tv_signals"
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    raw_payload = Column(Text)
+    parsed_action = Column(String, index=True)  # BUY, SELL, FLATTEN
+    parsed_symbol = Column(String)  # NQ, MNQ, etc.
+    parsed_qty = Column(Integer)
+    status = Column(String, index=True)  # EXECUTED, REJECTED, BLOCKED
+    reject_reason = Column(String, nullable=True)
+    execution_price = Column(Float, nullable=True)
+    strategy_name = Column(String, nullable=True)  # from TradingView "strategy" field
+    alert_name = Column(String, nullable=True)  # from TradingView "alert_name" field
+
+class DBRiskState(Base):
+    """
+    Persisted risk-manager state (single row) so a restart cannot silently
+    clear a kill switch, a daily lock, or the trailing-drawdown high-water mark.
+    """
+    __tablename__ = "risk_state"
+    id = Column(Integer, primary_key=True, index=True)
+    account_size = Column(Float, default=50000.0)
+    total_pnl = Column(Float, default=0.0)
+    peak_equity = Column(Float, default=50000.0)
+    daily_pnl = Column(Float, default=0.0)
+    day_start_pnl = Column(Float, default=0.0)
+    current_date = Column(String, nullable=True)  # ISO date string
+    trades_today = Column(Integer, default=0)
+    consecutive_losses = Column(Integer, default=0)
+    cooldown_remaining = Column(Integer, default=0)
+    daily_blocked = Column(Boolean, default=False)
+    killed = Column(Boolean, default=False)
+    kill_reason = Column(String, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
